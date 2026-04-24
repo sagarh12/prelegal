@@ -120,8 +120,11 @@ export function buildFilledMnda(
   return `${coverPage}\n\n---\n\n${filledTerms}`;
 }
 
-export function downloadFilename(d: MndaFormData): string {
+export function downloadFilename(
+  d: MndaFormData,
+  ext: "md" | "pdf" = "pdf",
+): string {
   const slug = (s: string) =>
     s.trim().replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "") || "Party";
-  return `Mutual-NDA-${slug(d.party1Name)}-${slug(d.party2Name)}.md`;
+  return `Mutual-NDA-${slug(d.party1Name)}-${slug(d.party2Name)}.${ext}`;
 }

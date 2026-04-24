@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -72,6 +72,8 @@ const inputClass =
 
 export function MndaEditor({ standardTerms }: Props) {
   const [form, setForm] = useState<MndaFormData>(defaultFormData);
+  const [isExporting, setIsExporting] = useState(false);
+  const previewRef = useRef<HTMLElement | null>(null);
 
   const filled = useMemo(
     () => buildFilledMnda(standardTerms, form),
@@ -81,16 +83,25 @@ export function MndaEditor({ standardTerms }: Props) {
   const update = (id: keyof MndaFormData, value: string) =>
     setForm((prev) => ({ ...prev, [id]: value }));
 
-  const handleDownload = () => {
-    const blob = new Blob([filled], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = downloadFilename(form);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const handleDownloadPdf = async () => {
+    if (!previewRef.current || isExporting) return;
+    setIsExporting(true);
+    try {
+      // Dynamic import keeps jsPDF (+ html2canvas) out of the initial bundle.
+      const { default: jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ unit: "pt", format: "letter" });
+      // Letter @ 72dpi = 612x792pt; 48pt margins leave a 516x696 content box.
+      await doc.html(previewRef.current, {
+        margin: [48, 48, 48, 48],
+        autoPaging: "text",
+        width: 516,
+        windowWidth: 800,
+        html2canvas: { scale: 0.75, useCORS: true },
+      });
+      doc.save(downloadFilename(form, "pdf"));
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -149,10 +160,11 @@ export function MndaEditor({ standardTerms }: Props) {
             </button>
             <button
               type="button"
-              onClick={handleDownload}
-              className="rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
+              onClick={handleDownloadPdf}
+              disabled={isExporting}
+              className="rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60"
             >
-              Download .md
+              {isExporting ? "Generating PDF…" : "Download PDF"}
             </button>
           </div>
         </form>
@@ -167,7 +179,10 @@ export function MndaEditor({ standardTerms }: Props) {
             Based on CommonPaper Mutual NDA v1.0 (CC BY 4.0)
           </span>
         </div>
-        <article className="prose prose-sm prose-slate max-w-none">
+        <article
+          ref={previewRef}
+          className="prose prose-sm prose-slate max-w-none"
+        >
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{filled}</ReactMarkdown>
         </article>
       </section>
